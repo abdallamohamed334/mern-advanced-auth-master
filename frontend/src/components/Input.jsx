@@ -1,14 +1,51 @@
-const Input = ({ icon: Icon, ...props }) => {
+import React from 'react';
+import { motion } from 'framer-motion';
+
+const Input = ({ 
+	icon: Icon, 
+	type = 'text', 
+	placeholder, 
+	value, 
+	onChange, 
+	className = '',
+	...props 
+}) => {
 	return (
-		<div className='relative mb-6'>
-			<div className='absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none'>
-				<Icon className='size-5 text-green-500' />
-			</div>
+		<motion.div
+			whileFocus={{ scale: 1.02 }}
+			className={`relative flex items-center mb-4 ${className}`}
+		>
+			{Icon && (
+				<div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+					<Icon className="w-5 h-5" />
+				</div>
+			)}
 			<input
+				type={type}
+				placeholder={placeholder}
+				value={value}
+				onChange={onChange}
+				className={`
+					w-full px-4 py-3 pr-12 
+					border-2 border-gray-200 
+					rounded-lg 
+					bg-white
+					text-gray-800
+					placeholder-gray-500
+					focus:outline-none 
+					focus:border-blue-500 
+					focus:ring-2 
+					focus:ring-blue-200 
+					focus:ring-opacity-50
+					transition-all 
+					duration-200
+					text-right
+					direction: rtl
+				`}
 				{...props}
-				className='w-full pl-10 pr-3 py-2 bg-gray-800 bg-opacity-50 rounded-lg border border-gray-700 focus:border-green-500 focus:ring-2 focus:ring-green-500 text-white placeholder-gray-400 transition duration-200'
 			/>
-		</div>
+		</motion.div>
 	);
 };
+
 export default Input;

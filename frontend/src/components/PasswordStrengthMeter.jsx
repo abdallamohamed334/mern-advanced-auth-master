@@ -1,76 +1,120 @@
-import { Check, X } from "lucide-react";
-
-const PasswordCriteria = ({ password }) => {
-	const criteria = [
-		{ label: "At least 6 characters", met: password.length >= 6 },
-		{ label: "Contains uppercase letter", met: /[A-Z]/.test(password) },
-		{ label: "Contains lowercase letter", met: /[a-z]/.test(password) },
-		{ label: "Contains a number", met: /\d/.test(password) },
-		{ label: "Contains special character", met: /[^A-Za-z0-9]/.test(password) },
-	];
-
-	return (
-		<div className='mt-2 space-y-1'>
-			{criteria.map((item) => (
-				<div key={item.label} className='flex items-center text-xs'>
-					{item.met ? (
-						<Check className='size-4 text-green-500 mr-2' />
-					) : (
-						<X className='size-4 text-gray-500 mr-2' />
-					)}
-					<span className={item.met ? "text-green-500" : "text-gray-400"}>{item.label}</span>
-				</div>
-			))}
-		</div>
-	);
-};
+import { motion } from "framer-motion";
+import { useState, useEffect } from "react";
 
 const PasswordStrengthMeter = ({ password }) => {
-	const getStrength = (pass) => {
-		let strength = 0;
-		if (pass.length >= 6) strength++;
-		if (pass.match(/[a-z]/) && pass.match(/[A-Z]/)) strength++;
-		if (pass.match(/\d/)) strength++;
-		if (pass.match(/[^a-zA-Z\d]/)) strength++;
-		return strength;
-	};
-	const strength = getStrength(password);
+	const [strength, setStrength] = useState(0);
+	const [feedback, setFeedback] = useState("");
 
-	const getColor = (strength) => {
-		if (strength === 0) return "bg-red-500";
-		if (strength === 1) return "bg-red-400";
-		if (strength === 2) return "bg-yellow-500";
-		if (strength === 3) return "bg-yellow-400";
-		return "bg-green-500";
+	useEffect(() => {
+		calculateStrength(password);
+	}, [password]);
+
+	const calculateStrength = (password) => {
+		let score = 0;
+		let feedbackMessages = [];
+
+		if (!password) {
+			setStrength(0);
+			setFeedback("");
+			return;
+		}
+
+		// Length check
+		if (password.length >= 8) score += 1;
+		else feedbackMessages.push("كلمة المرور يجب أن تكون 8 أحرف على الأقل");
+
+		// Lowercase check
+		if (/[a-z]/.test(password)) score += 1;
+		else feedbackMessages.push("أضف أحرف صغيرة");
+
+		// Uppercase check
+		if (/[A-Z]/.test(password)) score += 1;
+		else feedbackMessages.push("أضف أحرف كبيرة");
+
+		// Numbers check
+		if (/[0-9]/.test(password)) score += 1;
+		else feedbackMessages.push("أضف أرقام");
+
+		// Special characters check
+		if (/[^A-Za-z0-9]/.test(password)) score += 1;
+		else feedbackMessages.push("أضف رموز خاصة");
+
+		setStrength(score);
+		setFeedback(feedbackMessages.join("، "));
 	};
 
-	const getStrengthText = (strength) => {
-		if (strength === 0) return "Very Weak";
-		if (strength === 1) return "Weak";
-		if (strength === 2) return "Fair";
-		if (strength === 3) return "Good";
-		return "Strong";
+	const getStrengthColor = () => {
+		switch (strength) {
+			case 0:
+			case 1:
+				return "bg-red-500";
+			case 2:
+				return "bg-orange-500";
+			case 3:
+				return "bg-yellow-500";
+			case 4:
+				return "bg-blue-500";
+			case 5:
+				return "bg-green-500";
+			default:
+				return "bg-gray-300";
+		}
 	};
+
+	const getStrengthText = () => {
+		switch (strength) {
+			case 0:
+				return "ضعيفة جداً";
+			case 1:
+				return "ضعيفة";
+			case 2:
+				return "متوسطة";
+			case 3:
+				return "جيدة";
+			case 4:
+				return "قوية";
+			case 5:
+				return "قوية جداً";
+			default:
+				return "";
+		}
+	};
+
+	if (!password) return null;
 
 	return (
-		<div className='mt-2'>
-			<div className='flex justify-between items-center mb-1'>
-				<span className='text-xs text-gray-400'>Password strength</span>
-				<span className='text-xs text-gray-400'>{getStrengthText(strength)}</span>
+		<motion.div
+			initial={{ opacity: 0, height: 0 }}
+			animate={{ opacity: 1, height: "auto" }}
+			className="space-y-2"
+		>
+			<div className="flex items-center justify-between text-sm">
+				<span className="text-gray-600">قوة كلمة المرور:</span>
+				<span className={`font-medium ${
+					strength <= 2 ? "text-red-600" :
+					strength === 3 ? "text-yellow-600" :
+					"text-green-600"
+				}`}>
+					{getStrengthText()}
+				</span>
 			</div>
-
-			<div className='flex space-x-1'>
-				{[...Array(4)].map((_, index) => (
-					<div
-						key={index}
-						className={`h-1 w-1/4 rounded-full transition-colors duration-300 
-                ${index < strength ? getColor(strength) : "bg-gray-600"}
-              `}
-					/>
-				))}
+			
+			<div className="w-full bg-gray-200 rounded-full h-2">
+				<motion.div
+					initial={{ width: 0 }}
+					animate={{ width: `${(strength / 5) * 100}%` }}
+					transition={{ duration: 0.5 }}
+					className={`h-2 rounded-full transition-all duration-500 ${getStrengthColor()}`}
+				/>
 			</div>
-			<PasswordCriteria password={password} />
-		</div>
+			
+			{feedback && (
+				<p className="text-xs text-gray-500 text-right">
+					{feedback}
+				</p>
+			)}
+		</motion.div>
 	);
 };
+
 export default PasswordStrengthMeter;
