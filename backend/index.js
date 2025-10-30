@@ -14,23 +14,40 @@ import decorationRoutes from './routes/decorations.route.js';
 dotenv.config();
 
 const app = express();
-// **تفعيل الـ Proxy عشان الكوكيز تشتغل صح على السيرفرات السحابية**
+// 1. تفعيل الـ Proxy ليعمل مع الكوكيز (ضروري للـ Production)
 app.set("trust proxy", 1); 
 
 const PORT = process.env.PORT || 5000;
 const __dirname = path.resolve();
 
 // ==========================================================
-// تعديل الـ CORS لضمان استخدام HTTPS والـ Subdomain
-// يجب استبدال الرابط أدناه برابط Vercel الثابت الخاص بك:
+// 2. إعداد CORS بشكل دقيق
 // ==========================================================
-app.use(cors({ 
-    origin: "https://mern-advanced-auth-master-urcm.vercel.app", 
-    credentials: true 
-}));
+const corsOptions = { 
+    // نستخدم متغير البيئة CLIENT_URL
+    origin: process.env.CLIENT_URL || "https://mern-advanced-auth-master-urcm.vercel.app", 
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE'], // لا نضع OPTIONS هنا
+    allowedHeaders: ['Content-Type', 'Authorization'],
+};
 
-app.use(express.json()); // allows us to parse incoming requests:req.body
-app.use(cookieParser()); // allows us to parse incoming cookies
+// 🚨 الخطوة 2أ: تطبيق الـ CORS Middleware على جميع الطلبات
+app.use(cors(corsOptions)); 
+
+// 🚨🚨 الخطوة الحاسمة (3): معالجة طلب OPTIONS بشكل منفصل ومضمون 🚨🚨
+// هذا يضمن أن طلب الـ Preflight سيحصل على استجابة 204 (نجاح) بدلاً من 404
+app.options('*', (req, res) => {
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    // نستخدم هنا الـ origin الذي تم تحديده في corsOptions
+    res.header('Access-Control-Allow-Origin', corsOptions.origin); 
+    res.sendStatus(204); // إرسال استجابة نجاح (No Content)
+}); 
+
+// يجب أن يأتي express.json و cookieParser بعد CORS
+app.use(express.json()); // يسمح بقراءة req.body
+app.use(cookieParser()); // يسمح بقراءة الكوكيز
 
 // Routes
 app.use("/api/auth", authRoutes);
@@ -40,18 +57,18 @@ app.use("/api/decorations", decorationRoutes);
 
 // Health check route
 app.get("/api/health", (req, res) => {
-  res.json({ message: "API is running successfully! 🚀" });
+    res.json({ message: "API is running successfully! 🚀" });
 });
 
 if (process.env.NODE_ENV === "production") {
-    app.use(express.static(path.join(__dirname, "/frontend/dist")));
+    app.use(express.static(path.join(__dirname, "/frontend/dist")));
 
-    app.get("*", (req, res) => {
-        res.sendFile(path.resolve(__dirname, "frontend", "dist", "index.html"));
-    });
+    app.get("*", (req, res) => {
+        res.sendFile(path.resolve(__dirname, "frontend", "dist", "index.html"));
+    });
 }
 
 app.listen(PORT, () => {
-    connectDB();
-    console.log("Server is running on port: ", PORT);
+    connectDB();
+    console.log("Server is running on port: ", PORT);
 });
