@@ -21,7 +21,7 @@ const PORT = process.env.PORT || 5000;
 const __dirname = path.resolve();
 
 // تحديد رابط الواجهة الأمامية (Vercel) بشكل صريح
-const CLIENT_ORIGIN = process.env.CLIENT_URL || "https://mern-advanced-auth-master-urcm.vercel.app";
+const CLIENT_ORIGIN = process.env.CLIENT_URL || "mern-advanced-auth-master.railway.internal";
 
 // ==========================================================
 // 2. إعداد CORS بشكل دقيق
