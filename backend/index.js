@@ -14,51 +14,40 @@ import decorationRoutes from './routes/decorations.route.js';
 dotenv.config();
 
 const app = express();
-// 1. تفعيل الـ Proxy ليعمل مع الكوكيز (ضروري للـ Production)
+// **تفعيل الـ Proxy علشان الكوكيز تشتغل صح على السيرفرات السحابية**
 app.set("trust proxy", 1); 
 
 const PORT = process.env.PORT || 5000;
 const __dirname = path.resolve();
 
-// تحديد رابط الواجهة الأمامية (Vercel) بشكل صريح
-// ملاحظة: يجب أن يحتوي CLIENT_URL على رابط Vercel العام
+// ==========================================================
+// 🚨 تحديد الـ Origin لضمان قبول الكوكيز
+// ==========================================================
+// يجب استخدام رابط Vercel العام هنا، وليس رابط Railway الداخلي
 const CLIENT_ORIGIN = process.env.CLIENT_URL || "https://mern-advanced-auth-master-urcm.vercel.app";
 
-// ==========================================================
-// 2. إعداد CORS بشكل دقيق
-// ==========================================================
 const corsOptions = { 
     origin: CLIENT_ORIGIN, 
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE'], 
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true 
 };
 
-// 🚨 الخطوة 2أ: تطبيق الـ CORS Middleware على جميع الطلبات
-app.use(cors(corsOptions)); 
+// 1. تفعيل CORS بشكل عام
+app.use(cors(corsOptions));
 
-// 🚨 الخطوة 2ب: المعالج اليدوي لـ OPTIONS (يضمن الرد 204)
+// 2. التعامل الصريح مع طلبات OPTIONS لتفادي 502/404 على Preflight
+// يجب وضع هذا الكود بعد app.use(cors)
 app.options('*', (req, res) => {
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
+    // التأكيد على الهيدرات المطلوبة لنجاح طلبات ما قبل الرحلة
+    res.header('Access-Control-Allow-Origin', CLIENT_ORIGIN);
+    res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Allow-Origin', CLIENT_ORIGIN); 
+    // إرسال 204 (نجاح بدون محتوى) لإنهاء فحص OPTIONS
     res.sendStatus(204); 
-}); 
-
-// ==========================================================
-// 🚨🚨 الحل الجذري لضمان الـ CORS على استجابة الـ POST
-// إضافة الهيدرات يدوياً في كل استجابة لضمان السماح بالكوكيز
-// ==========================================================
-app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', CLIENT_ORIGIN);
-    res.header('Access-Control-Allow-Credentials', 'true');
-    next();
 });
 
-// يجب أن يأتي express.json و cookieParser بعد CORS
-app.use(express.json()); // يسمح بقراءة req.body
-app.use(cookieParser()); // يسمح بقراءة الكوكيز
+app.use(express.json()); // allows us to parse incoming requests:req.body
+app.use(cookieParser()); // allows us to parse incoming cookies
 
 // Routes
 app.use("/api/auth", authRoutes);
