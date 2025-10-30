@@ -8,6 +8,8 @@ import { connectDB } from "./db/connectDB.js";
 
 import authRoutes from "./routes/auth.route.js";
 import weddingVenuesRoutes from "./routes/weddingVenues.route.js";
+import photographersRoutes from "./routes/photographers.route.js";
+import decorationRoutes from './routes/decorations.route.js'; // الجديد
 
 dotenv.config();
 
@@ -22,7 +24,9 @@ app.use(cookieParser()); // allows us to parse incoming cookies
 
 // Routes
 app.use("/api/auth", authRoutes);
-app.use("/api/wedding-venues", weddingVenuesRoutes); // الجديد
+app.use("/api/wedding-venues", weddingVenuesRoutes); // قاعات الأفراح
+app.use("/api/photographers", photographersRoutes); 
+app.use("/api/decorations", decorationRoutes);// المصورين - المضاف جديد
 
 // Health check route
 app.get("/api/health", (req, res) => {

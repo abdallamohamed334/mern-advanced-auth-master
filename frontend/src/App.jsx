@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import FloatingShape from "./components/FloatingShape";
-
+import DecorationsPage from './pages/DecorationsPage';
 import SignUpPage from "./pages/SignUpPage";
 import LoginPage from "./pages/LoginPage";
 import EmailVerificationPage from "./pages/EmailVerificationPage";
@@ -85,6 +85,7 @@ function App() {
             </ProtectedRoute>
           }
         />
+		    <Route path="/decorations" element={<DecorationsPage />} />
 
         {/* صفحات أنواع القاعات */}
         <Route

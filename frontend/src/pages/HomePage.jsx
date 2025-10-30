@@ -36,13 +36,13 @@ const CompanyHomePage = () => {
     },
     {
       id: 3,
-      title: "كافيهات",
+      title: "ديكورات",
       description: "لللقاءات العائلية والاجتماعات",
       icon: "🏪",
       color: "from-green-400 to-emerald-400",
       bgColor: "bg-white",
       borderColor: "border-green-100",
-      route: "/cafes"
+      route: "/decorations"
     },
     {
       id: 4,
