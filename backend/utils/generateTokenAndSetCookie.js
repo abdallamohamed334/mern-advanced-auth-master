@@ -1,18 +1,23 @@
 import jwt from "jsonwebtoken";
 
-export const generateTokenAndSetCookie = (res, userId) => {
+const generateTokenAndSetCookie = (userId, res) => {
     const token = jwt.sign({ userId }, process.env.JWT_SECRET, {
-        expiresIn: "7d",
+        expiresIn: "15d",
     });
 
-    res.cookie("token", token, {
-        httpOnly: true,
-        // لازم تكون true عشان نستخدم SameSite: None
-        secure: process.env.NODE_ENV === "production", 
-        // لازم تكون None للسماح بالاتصال بين الدومينات
-        sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
-        maxAge: 7 * 24 * 60 * 60 * 1000,
+    // 🚨 التعديل الحاسم ليعمل في Production بين النطاقات المختلفة (Vercel و Railway)
+    const isProduction = process.env.NODE_ENV === "production";
+    
+    res.cookie("jwt", token, {
+        maxAge: 15 * 24 * 60 * 60 * 1000, // 15 days
+        httpOnly: true, // يمنع الوصول إليه عبر JavaScript
+        
+        // 🚨 يجب أن تكون SameSite=None ليتيح تبادل الكوكيز بين النطاقات
+        sameSite: isProduction ? "None" : "Lax", 
+        
+        // 🚨 يجب أن تكون Secure=true لـ SameSite=None ولأننا نستخدم HTTPS
+        secure: isProduction, 
     });
-
-    return token;
 };
+
+export default generateTokenAndSetCookie;
