@@ -1,15 +1,22 @@
 import { create } from "zustand";
 import axios from "axios";
 
-// ==========================================================
-// 🚨 الحل النهائي لمشكلة الـ 404 في الإنتاج (Production):
-// - في وضع التطوير (development): يستخدم رابط localhost.
-// - في وضع الإنتاج (production): يستخدم متغير VITE_BACKEND_URL الذي يجب
-//   أن يتم ضبطه في Vercel ليحتوي على رابط Railway الكامل (مثال: https://your-app.up.railway.app).
-// ==========================================================
-const FINAL_API_URL = import.meta.env.MODE === "development" 
-    ? "http://localhost:5000/api/auth" 
-    : `${import.meta.env.VITE_BACKEND_URL}/api/auth`; 
+// ====================================================================
+// 🚨 الحل الأخير: تحديد رابط الـ Backend (Railway) كقيمة افتراضية في Production
+// هذا يحل مشكلة الـ `/undefined/` التي ظهرت بسبب فشل Vercel في قراءة المتغير.
+// إذا كان رابط Railway الخاص بك مختلفًا، استبدل الرابط أدناه.
+// ====================================================================
+
+// رابط الـ Backend الذي يعمل على Railway (يجب التأكد من هذا الرابط)
+const RAILWAY_BACKEND_BASE = "https://mern-advanced-auth-master-urcm.up.railway.app";
+
+// إذا كان الـ VITE_BACKEND_URL مُعَرَّفاً في Vercel، سنستخدمه.
+// وإذا لم يكن مُعَرَّفاً (وهو ما يسبب الـ undefined)، فسنعتمد على رابط Hardcoded
+const FINAL_API_BASE_URL = import.meta.env.MODE === "development" 
+    ? "http://localhost:5000" 
+    : (import.meta.env.VITE_BACKEND_URL || RAILWAY_BACKEND_BASE); 
+
+const FINAL_API_URL = `${FINAL_API_BASE_URL}/api/auth`;
 
 axios.defaults.withCredentials = true;
 
@@ -45,7 +52,7 @@ export const useAuthStore = create((set) => ({
                 isLoading: false,
             });
         } catch (error) {
-            // الآن رسالة الخطأ ستكون دقيقة بعد حل مشكلة الـ 404
+            // الآن ستكون رسالة الخطأ دقيقة (CORS أو Logic) وليس 404
             set({ error: error.response?.data?.message || "Error logging in", isLoading: false });
             throw error;
         }
