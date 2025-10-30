@@ -20,12 +20,15 @@ app.set("trust proxy", 1);
 const PORT = process.env.PORT || 5000;
 const __dirname = path.resolve();
 
+// تحديد رابط الواجهة الأمامية (Vercel) بشكل صريح
+const CLIENT_ORIGIN = process.env.CLIENT_URL || "https://mern-advanced-auth-master-urcm.vercel.app";
+
 // ==========================================================
 // 2. إعداد CORS بشكل دقيق
 // ==========================================================
 const corsOptions = { 
-    // نستخدم متغير البيئة CLIENT_URL
-    origin: process.env.CLIENT_URL || "https://mern-advanced-auth-master-urcm.vercel.app", 
+    // نستخدم رابط Vercel
+    origin: CLIENT_ORIGIN, 
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE'], // لا نضع OPTIONS هنا
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -40,8 +43,8 @@ app.options('*', (req, res) => {
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
     res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     res.header('Access-Control-Allow-Credentials', 'true');
-    // نستخدم هنا الـ origin الذي تم تحديده في corsOptions
-    res.header('Access-Control-Allow-Origin', corsOptions.origin); 
+    // نستخدم هنا المتغير CLIENT_ORIGIN المضمون
+    res.header('Access-Control-Allow-Origin', CLIENT_ORIGIN); 
     res.sendStatus(204); // إرسال استجابة نجاح (No Content)
 }); 
 
@@ -52,7 +55,7 @@ app.use(cookieParser()); // يسمح بقراءة الكوكيز
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/wedding-venues", weddingVenuesRoutes); 
-app.use("/api/photographers", photographersRoutes); 
+app.use("/api/photographers", weddingVenuesRoutes); 
 app.use("/api/decorations", decorationRoutes);
 
 // Health check route
