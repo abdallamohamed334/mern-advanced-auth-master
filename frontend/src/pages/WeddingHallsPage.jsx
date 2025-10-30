@@ -17,6 +17,13 @@ const WeddingHallsPage = () => {
   const [error, setError] = useState(null);
   const [weddingVenues, setWeddingVenues] = useState([]);
   const [dataSource, setDataSource] = useState("");
+  
+  // States for booking system
+  const [showBookingModal, setShowBookingModal] = useState(false);
+  const [bookingType, setBookingType] = useState("");
+  const [bookingLoading, setBookingLoading] = useState(false);
+  const [bookingSuccess, setBookingSuccess] = useState(false);
+  const [smsStatus, setSmsStatus] = useState("");
 
   // محافظات مصر والمدن التابعة لها
   const governorates = {
@@ -130,8 +137,6 @@ const WeddingHallsPage = () => {
         setLoading(true);
         setError(null);
         
-        console.log('🔄 جاري جلب البيانات من API...');
-        
         const response = await fetch('http://localhost:5000/api/wedding-venues', {
           method: 'GET',
           headers: {
@@ -141,12 +146,10 @@ const WeddingHallsPage = () => {
 
         if (response.ok) {
           const data = await response.json();
-          console.log('✅ تم جلب البيانات بنجاح:', data);
           
           if (data.venues && data.venues.length > 0) {
             setWeddingVenues(data.venues);
             setDataSource("api");
-            console.log(`🎉 تم تحميل ${data.venues.length} قاعة من الـ API`);
           } else {
             throw new Error('لا توجد بيانات في الـ API');
           }
@@ -154,7 +157,6 @@ const WeddingHallsPage = () => {
           throw new Error(`فشل في جلب البيانات: ${response.status}`);
         }
       } catch (err) {
-        console.error('❌ خطأ في جلب البيانات:', err.message);
         setDataSource("error");
         setError(`تعذر الاتصال بالخادم: ${err.message}`);
       } finally {
@@ -167,8 +169,6 @@ const WeddingHallsPage = () => {
 
   // فلترة الأماكن
   useEffect(() => {
-    console.log('🔄 جاري فلترة البيانات...', weddingVenues.length);
-    
     const filtered = weddingVenues.filter(venue => {
       const matchesCategory = activeFilter === "all" || venue.category === activeFilter;
       const matchesPrice = venue.price <= priceRange;
@@ -179,8 +179,70 @@ const WeddingHallsPage = () => {
     });
     
     setFilteredVenues(filtered);
-    console.log('✅ تمت الفلترة:', filtered.length, 'نتيجة');
   }, [activeFilter, priceRange, selectedGovernorate, selectedCity, weddingVenues]);
+
+  // دالة إرسال SMS
+  const sendSMSNotification = async (phoneNumber, venueName, bookingType, userName) => {
+    try {
+      setSmsStatus("جاري إرسال الرسالة...");
+      
+      const message = bookingType === "inspection" 
+        ? `عزيزي ${userName}، تم استلام طلب المعاينة الخاص بك لقاعة ${venueName}. طلبك قيد المعالجة وسنتواصل معك قريباً لتأكيد الموعد. شكراً لاختيارك منصتنا - ايفنتو`
+        : `عزيزي ${userName}، تم استلام طلب الحجز الخاص بك لقاعة ${venueName}. طلبك قيد المعالجة وسنتواصل معك قريباً لتأكيد التفاصيل. شكراً لاختيارك منصتنا - ايفنتو`;
+
+      // إرسال طلب SMS للخادم
+      const response = await fetch('http://localhost:5000/api/send-sms', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: phoneNumber,
+          message: message,
+          type: bookingType
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setSmsStatus("success");
+        console.log('✅ تم إرسال SMS بنجاح:', result);
+        return true;
+      } else {
+        throw new Error('فشل في إرسال الرسالة');
+      }
+    } catch (error) {
+      console.error('❌ خطأ في إرسال SMS:', error);
+      setSmsStatus("error");
+      return false;
+    }
+  };
+
+  // دالة إرسال إشعار للمالك
+  const sendOwnerNotification = async (venue, bookingData, userName, phoneNumber) => {
+    try {
+      const ownerMessage = `طلب جديد: ${bookingType === "inspection" ? "معاينة" : "حجز"}
+القاعة: ${venue.name}
+العميل: ${userName}
+الهاتف: ${phoneNumber}
+${bookingType === "inspection" ? `موعد المعاينة: ${bookingData.inspectionDate} - ${bookingData.inspectionTime}` : `تاريخ الفرح: ${bookingData.date}`}`;
+
+      // إرسال إشعار للمالك
+      await fetch('http://localhost:5000/api/notify-owner', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: venue.ownerPhone, // رقم صاحب القاعة
+          message: ownerMessage,
+          venueId: venue._id
+        })
+      });
+    } catch (error) {
+      console.error('❌ خطأ في إرسال إشعار المالك:', error);
+    }
+  };
 
   const handleBackToHome = () => {
     navigate("/");
@@ -226,15 +288,431 @@ const WeddingHallsPage = () => {
     setSelectedCity("all");
   };
 
+  // وظائف نظام الحجز
+  const handleBookNow = (venue) => {
+    setSelectedVenue(venue);
+    setShowBookingModal(true);
+    setBookingType("");
+    setBookingSuccess(false);
+    setSmsStatus("");
+  };
+
+  const closeBookingModal = () => {
+    setShowBookingModal(false);
+    setBookingType("");
+    setBookingSuccess(false);
+    setSmsStatus("");
+  };
+
+  const handleBookingSubmit = async (bookingData) => {
+    setBookingLoading(true);
+    setSmsStatus("");
+    
+    try {
+      // 1. أولاً إرسال SMS للعميل
+      const smsSent = await sendSMSNotification(
+        bookingData.phone,
+        selectedVenue.name,
+        bookingType,
+        user?.name || bookingData.name || 'عميلنا الكريم'
+      );
+
+      if (!smsSent) {
+        throw new Error('فشل في إرسال الرسالة النصية');
+      }
+
+      // 2. إرسال إشعار للمالك
+      await sendOwnerNotification(selectedVenue, bookingData, user?.name || 'عميل', bookingData.phone);
+
+      // 3. حفظ بيانات الحجز في قاعدة البيانات
+      const bookingResponse = await fetch('http://localhost:5000/api/bookings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          venueId: selectedVenue._id,
+          venueName: selectedVenue.name,
+          type: bookingType,
+          userName: user?.name || bookingData.name,
+          userPhone: bookingData.phone,
+          userEmail: bookingData.email,
+          date: bookingType === "direct" ? bookingData.date : bookingData.inspectionDate,
+          time: bookingType === "direct" ? bookingData.time : bookingData.inspectionTime,
+          guests: bookingData.guests,
+          notes: bookingData.notes,
+          status: 'pending'
+        })
+      });
+
+      if (!bookingResponse.ok) {
+        throw new Error('فشل في حفظ بيانات الحجز');
+      }
+
+      setBookingSuccess(true);
+      
+      // رسائل نجاح مختلفة حسب نوع الحجز
+      if (bookingType === "direct") {
+        alert('🎉 تم إرسال طلب الحجز بنجاح! تم إرسال رسالة تأكيد لهاتفك. سنتواصل معك قريباً لتأكيد التفاصيل.');
+      } else {
+        alert('🔍 تم إرسال طلب المعاينة بنجاح! تم إرسال رسالة تأكيد لهاتفك. طلبك قيد المعالجة وسنتواصل معك قريباً.');
+      }
+      
+      // إغلاق المودال بعد 3 ثواني
+      setTimeout(() => {
+        closeBookingModal();
+      }, 3000);
+      
+    } catch (err) {
+      console.error('خطأ في الحجز:', err);
+      alert('❌ حدث خطأ أثناء إرسال الطلب. يرجى المحاولة مرة أخرى.');
+    } finally {
+      setBookingLoading(false);
+    }
+  };
+
+  // مودال اختيار نوع الحجز
+  const BookingTypeModal = () => {
+    if (!showBookingModal || !selectedVenue) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-white rounded-2xl max-w-md w-full mx-auto"
+        >
+          {!bookingType ? (
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-bold text-gray-900">اختر نوع الحجز</h3>
+                <button
+                  onClick={closeBookingModal}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div 
+                  onClick={() => setBookingType("direct")}
+                  className="border-2 border-green-200 rounded-xl p-4 cursor-pointer hover:border-green-400 transition-colors group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center group-hover:bg-green-200 transition-colors">
+                      <span className="text-2xl">🎉</span>
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-gray-900">حجز مباشر</h4>
+                      <p className="text-sm text-gray-600">احجز القاعة مباشرة للفرح</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div 
+                  onClick={() => setBookingType("inspection")}
+                  className="border-2 border-blue-200 rounded-xl p-4 cursor-pointer hover:border-blue-400 transition-colors group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center group-hover:bg-blue-200 transition-colors">
+                      <span className="text-2xl">🔍</span>
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-gray-900">طلب معاينة</h4>
+                      <p className="text-sm text-gray-600">اطلب معاينة القاعة قبل الحجز + تأكيد برسالة SMS</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                <h4 className="font-medium text-gray-900 mb-2">معلومات القاعة</h4>
+                <p className="text-sm text-gray-600">{selectedVenue.name}</p>
+                <p className="text-sm text-gray-600">{selectedVenue.city}، {selectedVenue.governorate}</p>
+                <p className="text-sm font-semibold text-purple-600">
+                  {parseInt(selectedVenue.price)?.toLocaleString()} جنيه
+                </p>
+              </div>
+            </div>
+          ) : (
+            <BookingForm 
+              type={bookingType}
+              venue={selectedVenue}
+              onSubmit={handleBookingSubmit}
+              onBack={() => setBookingType("")}
+              loading={bookingLoading}
+              success={bookingSuccess}
+              smsStatus={smsStatus}
+            />
+          )}
+        </motion.div>
+      </div>
+    );
+  };
+
+  // نموذج الحجز
+  const BookingForm = ({ type, venue, onSubmit, onBack, loading, success, smsStatus }) => {
+    const [formData, setFormData] = useState({
+      date: '',
+      time: '',
+      guests: 1,
+      inspectionDate: '',
+      inspectionTime: '',
+      notes: '',
+      phone: '',
+      email: user?.email || '',
+      name: user?.name || ''
+    });
+
+    const handleSubmit = (e) => {
+      e.preventDefault();
+      onSubmit(formData);
+    };
+
+    if (success) {
+      return (
+        <div className="p-6 text-center">
+          <div className="text-6xl mb-4">🎉</div>
+          <h3 className="text-xl font-bold text-gray-900 mb-2">تم إرسال الطلب بنجاح!</h3>
+          <p className="text-gray-600 mb-4">
+            {type === "direct" 
+              ? "تم إرسال طلب الحجز بنجاح وسنتواصل معك قريباً" 
+              : "تم إرسال طلب المعاينة بنجاح وسنتواصل معك لتأكيد الموعد"}
+          </p>
+          
+          {/* رسالة SMS */}
+          <div className="bg-green-50 p-4 rounded-lg mb-4">
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <svg className="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
+                <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
+              </svg>
+              <span className="text-green-800 font-medium">تم إرسال رسالة تأكيد إلى هاتفك</span>
+            </div>
+            <p className="text-sm text-green-700">
+              {type === "inspection" 
+                ? "طلبك قيد المعالجة وسنتواصل معك قريباً لتأكيد موعد المعاينة"
+                : "طلبك قيد المعالجة وسنتواصل معك قريباً لتأكيد تفاصيل الحجز"}
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="p-6">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h3 className="text-xl font-bold text-gray-900">
+              {type === "direct" ? "حجز القاعة" : "طلب معاينة"}
+            </h3>
+            <p className="text-sm text-gray-600">{venue.name}</p>
+          </div>
+          <button
+            onClick={onBack}
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+          </button>
+        </div>
+
+        {/* حالة إرسال SMS */}
+        {smsStatus && (
+          <div className={`p-3 rounded-lg mb-4 ${
+            smsStatus === "success" ? "bg-green-50 text-green-700" : 
+            smsStatus === "error" ? "bg-red-50 text-red-700" : 
+            "bg-blue-50 text-blue-700"
+          }`}>
+            <div className="flex items-center gap-2">
+              {smsStatus === "success" ? (
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+              ) : smsStatus === "error" ? (
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              ) : (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+              )}
+              <span className="text-sm">
+                {smsStatus === "success" ? "تم إرسال الرسالة بنجاح" :
+                 smsStatus === "error" ? "فشل في إرسال الرسالة" :
+                 "جاري إرسال الرسالة..."}
+              </span>
+            </div>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* بيانات التواصل */}
+          <div className="grid grid-cols-1 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">الاسم الكامل *</label>
+              <input 
+                type="text" 
+                value={formData.name}
+                onChange={(e) => setFormData({...formData, name: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                required
+                placeholder="أدخل اسمك الكامل"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">رقم الهاتف *</label>
+              <input 
+                type="tel" 
+                value={formData.phone}
+                onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                required
+                placeholder="01XXXXXXXXX"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">البريد الإلكتروني *</label>
+              <input 
+                type="email" 
+                value={formData.email}
+                onChange={(e) => setFormData({...formData, email: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                required
+              />
+            </div>
+          </div>
+
+          {type === "direct" ? (
+            <>
+              {/* نموذج الحجز المباشر */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">تاريخ الفرح *</label>
+                <input 
+                  type="date" 
+                  value={formData.date}
+                  onChange={(e) => setFormData({...formData, date: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  required
+                  min={new Date().toISOString().split('T')[0]}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">مدة الفرح *</label>
+                <select 
+                  value={formData.time}
+                  onChange={(e) => setFormData({...formData, time: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  required
+                >
+                  <option value="">اختر المدة</option>
+                  <option value="4 ساعات (6:00 مساءً - 10:00 مساءً)">4 ساعات (6:00 مساءً - 10:00 مساءً)</option>
+                  <option value="6 ساعات (6:00 مساءً - 12:00 منتصف الليل)">6 ساعات (6:00 مساءً - 12:00 منتصف الليل)</option>
+                  <option value="8 ساعات (6:00 مساءً - 2:00 صباحاً)">8 ساعات (6:00 مساءً - 2:00 صباحاً)</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">عدد المدعوين *</label>
+                <input 
+                  type="number" 
+                  min="1"
+                  max={venue.capacity}
+                  value={formData.guests}
+                  onChange={(e) => setFormData({...formData, guests: parseInt(e.target.value)})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">السعة القصوى: {venue.capacity} شخص</p>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* نموذج طلب المعاينة */}
+              <div className="bg-blue-50 p-4 rounded-lg mb-4">
+                <div className="flex items-center gap-2 text-blue-800">
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                  <span className="text-sm font-medium">سيتم إرسال رسالة تأكيد إلى هاتفك بعد تقديم الطلب</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">تاريخ المعاينة *</label>
+                  <input 
+                    type="date" 
+                    value={formData.inspectionDate}
+                    onChange={(e) => setFormData({...formData, inspectionDate: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    required
+                    min={new Date().toISOString().split('T')[0]}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">الوقت *</label>
+                  <select 
+                    value={formData.inspectionTime}
+                    onChange={(e) => setFormData({...formData, inspectionTime: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    required
+                  >
+                    <option value="">اختر الوقت</option>
+                    <option value="9:00 صباحاً - 12:00 ظهراً">9:00 صباحاً - 12:00 ظهراً</option>
+                    <option value="12:00 ظهراً - 3:00 عصراً">12:00 ظهراً - 3:00 عصراً</option>
+                    <option value="3:00 عصراً - 6:00 مساءً">3:00 عصراً - 6:00 مساءً</option>
+                    <option value="6:00 مساءً - 9:00 مساءً">6:00 مساءً - 9:00 مساءً</option>
+                  </select>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ملاحظات إضافية */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">ملاحظات إضافية</label>
+            <textarea 
+              value={formData.notes}
+              onChange={(e) => setFormData({...formData, notes: e.target.value})}
+              rows="3"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="أي متطلبات أو استفسارات إضافية..."
+            />
+          </div>
+
+          <button 
+            type="submit"
+            disabled={loading}
+            className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-semibold transition-colors disabled:bg-gray-400 flex items-center justify-center gap-2"
+          >
+            {loading ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                جاري الإرسال...
+              </>
+            ) : (
+              <>
+                <span>{type === "direct" ? 'تأكيد الحجز' : 'إرسال طلب المعاينة'}</span>
+                <span>{type === "direct" ? '🎉' : '🔍'}</span>
+              </>
+            )}
+          </button>
+        </form>
+      </div>
+    );
+  };
+
   // صفحة تفاصيل القاعة مع السلايدر
   const VenueDetails = ({ venue }) => {
     const [selectedImage, setSelectedImage] = useState(0);
-    const [bookingData, setBookingData] = useState({
-      date: '',
-      time: '',
-      guests: 1
-    });
-    const [bookingLoading, setBookingLoading] = useState(false);
     const [autoSlide, setAutoSlide] = useState(true);
 
     // Auto slide functionality
@@ -263,21 +741,6 @@ const WeddingHallsPage = () => {
         setSelectedImage(prev => 
           prev === 0 ? venue.images.length - 1 : prev - 1
         );
-      }
-    };
-
-    const handleBookingSubmit = async (e) => {
-      e.preventDefault();
-      setBookingLoading(true);
-      
-      try {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        alert('تم إرسال طلب الحجز بنجاح! سنتواصل معك قريباً لتأكيد التفاصيل.');
-        setBookingData({ date: '', time: '', guests: 1 });
-      } catch (err) {
-        alert('حدث خطأ أثناء إرسال طلب الحجز. يرجى المحاولة مرة أخرى.');
-      } finally {
-        setBookingLoading(false);
       }
     };
 
@@ -475,7 +938,8 @@ const WeddingHallsPage = () => {
                   )}
                 </div>
                 <button 
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-semibold mt-4 transition-colors disabled:bg-gray-400"
+                  onClick={() => handleBookNow(venue)}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-semibold mt-4 transition-colors disabled:bg-gray-400"
                   disabled={!venue.available}
                 >
                   {venue.available ? 'احجز دلوقتي' : 'غير متاحة حالياً'}
@@ -600,55 +1064,26 @@ const WeddingHallsPage = () => {
                 </div>
               </div>
 
-              {/* Booking Form */}
+              {/* Booking Button */}
               <div className="bg-white rounded-2xl border border-gray-200 p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">طلب حجز</h3>
-                <form onSubmit={handleBookingSubmit} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">التاريخ</label>
-                    <input 
-                      type="date" 
-                      value={bookingData.date}
-                      onChange={(e) => setBookingData({...bookingData, date: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      required
-                      min={new Date().toISOString().split('T')[0]}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">الوقت</label>
-                    <select 
-                      value={bookingData.time}
-                      onChange={(e) => setBookingData({...bookingData, time: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      required
-                    >
-                      <option value="">اختر الوقت</option>
-                      <option value="06:00 مساءً - 10:00 مساءً">06:00 مساءً - 10:00 مساءً</option>
-                      <option value="10:00 مساءً - 02:00 صباحاً">10:00 مساءً - 02:00 صباحاً</option>
-                      <option value="02:00 صباحاً - 06:00 صباحاً">02:00 صباحاً - 06:00 صباحاً</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">عدد الأشخاص</label>
-                    <input 
-                      type="number" 
-                      min="1"
-                      max={venue.capacity}
-                      value={bookingData.guests}
-                      onChange={(e) => setBookingData({...bookingData, guests: parseInt(e.target.value)})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      required
-                    />
-                  </div>
-                  <button 
-                    type="submit"
-                    disabled={bookingLoading || !venue.available}
-                    className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-semibold transition-colors disabled:bg-gray-400"
-                  >
-                    {bookingLoading ? 'جاري إرسال الطلب...' : 'إرسال طلب الحجز'}
-                  </button>
-                </form>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">الحجز</h3>
+                <button 
+                  onClick={() => handleBookNow(venue)}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-lg font-semibold text-lg transition-colors disabled:bg-gray-400 flex items-center justify-center gap-2"
+                  disabled={!venue.available}
+                >
+                  {venue.available ? (
+                    <>
+                      <span>احجز الآن</span>
+                      <span>🎉</span>
+                    </>
+                  ) : (
+                    'غير متاحة حالياً'
+                  )}
+                </button>
+                <p className="text-sm text-gray-600 text-center mt-3">
+                  اختر بين الحجز المباشر أو طلب معاينة
+                </p>
               </div>
             </div>
           </div>
@@ -659,7 +1094,12 @@ const WeddingHallsPage = () => {
 
   // Render based on current view
   if (currentView === "details" && selectedVenue) {
-    return <VenueDetails venue={selectedVenue} />;
+    return (
+      <>
+        <VenueDetails venue={selectedVenue} />
+        <BookingTypeModal />
+      </>
+    );
   }
 
   return (
@@ -768,8 +1208,7 @@ const WeddingHallsPage = () => {
                   </svg>
                 </div>
                 <div>
-                  <p className="text-green-800 font-medium">✅ متصل بقاعدة البيانات</p>
-                  <p className="text-green-700 text-sm">يتم عرض البيانات الحقيقية من الخادم</p>
+                  <p className="text-green-800 font-medium">✅  قاعاتك الان متاحه</p>
                 </div>
               </div>
             </div>
@@ -984,14 +1423,24 @@ const WeddingHallsPage = () => {
                           </div>
                           <div className="mt-auto flex gap-2">
                             <button 
+                              onClick={() => handleVenueClick(venue)}
+                              className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm transition-colors"
+                            >
+                              شوف التفاصيل
+                            </button>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleBookNow(venue);
+                              }}
+                              disabled={!venue.available}
                               className={`flex-1 py-2 rounded-lg font-medium text-sm transition-colors ${
                                 venue.available 
-                                  ? 'bg-purple-600 hover:bg-purple-700 text-white' 
+                                  ? 'bg-green-600 hover:bg-green-700 text-white' 
                                   : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                               }`}
-                              disabled={!venue.available}
                             >
-                              {venue.available ? 'شوف التفاصيل' : 'مش متاحة'}
+                              احجز الآن
                             </button>
                           </div>
                         </div>
@@ -1004,6 +1453,9 @@ const WeddingHallsPage = () => {
           </div>
         </div>
       </section>
+
+      {/* Booking Modal */}
+      <BookingTypeModal />
     </div>
   );
 };

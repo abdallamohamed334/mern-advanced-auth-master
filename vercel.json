@@ -1,12 +1,22 @@
 {
+  "version": 2,
+  "name": "your-frontend-name",
   "builds": [
     {
-      "src": "frontend/package.json",
+      "src": "package.json",
       "use": "@vercel/static-build",
       "config": {
-        "distDir": "frontend/dist"
+        "distDir": "dist"
       }
     }
   ],
-  "outputDirectory": "frontend/dist"
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ],
+  "env": {
+    "VITE_STANDALONE": "true"
+  }
 }

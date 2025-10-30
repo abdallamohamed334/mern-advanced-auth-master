@@ -257,7 +257,7 @@ const samplePhotographers = [
     description: "مصور متخصص في التصوير التقليدي والتراثي، أحافظ على الأصالة والتراث في كل لقطة.",
     available: true,
     rating: 4.9,
-    contact: "01008889900",
+    contact: "+201040652783",
     email: "mohamed@photography.com",
     address: "شارع الكورنيش، الأقصر",
     socialMedia: {
