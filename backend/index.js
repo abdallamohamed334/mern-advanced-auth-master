@@ -25,7 +25,7 @@ const __dirname = path.resolve();
 // يجب استبدال الرابط أدناه برابط Vercel الثابت الخاص بك:
 // ==========================================================
 app.use(cors({ 
-    origin: "mern-advanced-auth-master.railway.internal", 
+    origin: "https://mern-advanced-auth-master-urcm.vercel.app", 
     credentials: true 
 }));
 
