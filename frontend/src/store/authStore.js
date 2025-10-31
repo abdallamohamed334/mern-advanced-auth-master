@@ -5,7 +5,7 @@ import axios from "axios";
 const RAILWAY_BACKEND_BASE = "https://mern-advanced-auth-master-production.up.railway.app"; 
 
 const FINAL_API_BASE = import.meta.env.MODE === "development"
-    ? "http://localhost:5000"
+    ? "https://mern-advanced-auth-master-production.up.railway.app"
     : RAILWAY_BACKEND_BASE; 
 
 axios.defaults.withCredentials = true;
