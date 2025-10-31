@@ -1,19 +1,59 @@
+// pages/LoginPage.tsx
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Mail, Lock, Loader, User, Star, CheckCircle, Calendar, Users } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import Input from "../components/Input";
 import { useAuthStore } from "../store/authStore";
 
 const LoginPage = () => {
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
+	const navigate = useNavigate();
 
-	const { login, isLoading, error } = useAuthStore();
+	// ⬇️⬇️⬇️ التعديل هنا - إضافة loginAdmin
+	const { login, loginAdmin, isLoading, error, clearMessages } = useAuthStore();
 
 	const handleLogin = async (e) => {
 		e.preventDefault();
-		await login(email, password);
+		clearMessages(); // مسح الأخطاء السابقة
+		
+		console.log("🟢 بدء عملية تسجيل الدخول...");
+		console.log("📧 الإيميل:", email);
+		console.log("🔑 الباسورد:", password);
+		
+		try {
+			// ⬇️⬇️⬇️ المحاولة الأولى: تسجيل دخول كأدمن
+			console.log("👑 محاولة تسجيل الدخول كأدمن...");
+			try {
+				const isAdmin = await loginAdmin(email, password);
+				console.log("✅ نتيجة تسجيل دخول الأدمن:", isAdmin);
+				
+				if (isAdmin) {
+					console.log("🚀 تم تسجيل دخول الأدمن بنجاح، التوجيه إلى لوحة التحكم...");
+					navigate('/admin/dashboard');
+					return; // توقف هنا علشان ميكملش
+				}
+			} catch (adminError) {
+				console.log("❌ فشل تسجيل دخول الأدمن، جاري تجربة المستخدم العادي...");
+			}
+
+			// ⬇️⬇️⬇️ المحاولة الثانية: تسجيل دخول كمستخدم عادي
+			console.log("👤 محاولة تسجيل الدخول كمستخدم عادي...");
+			const isUserAdmin = await login(email, password);
+			console.log("✅ نتيجة تسجيل دخول المستخدم:", isUserAdmin);
+			
+			if (isUserAdmin) {
+				console.log("🎯 المستخدم العادي له صلاحيات أدمن، التوجيه إلى لوحة التحكم...");
+				navigate('/admin/dashboard');
+			} else {
+				console.log("🏠 المستخدم عادي، التوجيه إلى الصفحة الرئيسية...");
+				navigate('/');
+			}
+
+		} catch (error) {
+			console.error('💥 فشلت جميع محاولات تسجيل الدخول:', error);
+		}
 	};
 
 	// Features list
@@ -282,6 +322,21 @@ const LoginPage = () => {
 												)}
 											</motion.button>
 										</motion.div>
+
+										{/* زر لملء بيانات الأدمن تلقائياً للاختبار */}
+										<div className="mt-4">
+											<button 
+												type="button"
+												onClick={() => {
+													setEmail("admin@test.com");
+													setPassword("123456");
+													console.log("✅ تم ملء بيانات الأدمن تلقائياً");
+												}}
+												className="w-full bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg transition-colors text-sm"
+											>
+												ملء بيانات الأدمن للاختبار
+											</button>
+										</div>
 									</form>
 
 									{/* Social Login Options */}

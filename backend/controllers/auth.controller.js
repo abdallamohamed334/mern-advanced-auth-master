@@ -10,6 +10,19 @@ import {
 } from "../mailtrap/emails.js";
 import { User } from "../models/user.model.js";
 
+// قائمة الإيميلات المميزة التي لها صلاحية أدمن
+const ADMIN_EMAILS = [
+    'admin@example.com',
+    'superadmin@company.com',
+    'administrator@platform.com',
+    'manager@reservation.com',
+    'ahmed.admin@email.com',
+    'mohamed.admin@email.com',
+    'admin@reservation-platform.com',
+    'superuser@platform.com'
+    // أضف هنا أي إيميلات أخرى تريد منحها صلاحية الأدمن
+];
+
 export const signup = async (req, res) => {
 	const { email, password, name } = req.body;
 
@@ -28,10 +41,14 @@ export const signup = async (req, res) => {
 		const hashedPassword = await bcryptjs.hash(password, 10);
 		const verificationToken = Math.floor(100000 + Math.random() * 900000).toString();
 
+		// تحديد دور المستخدم بناءً على الإيميل
+		const role = ADMIN_EMAILS.includes(email.toLowerCase()) ? 'admin' : 'user';
+
 		const user = new User({
 			email,
 			password: hashedPassword,
 			name,
+			role, // إضافة الدور
 			verificationToken,
 			verificationTokenExpiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
 		});
@@ -99,6 +116,17 @@ export const login = async (req, res) => {
 		const isPasswordValid = await bcryptjs.compare(password, user.password);
 		if (!isPasswordValid) {
 			return res.status(400).json({ success: false, message: "Invalid credentials" });
+		}
+
+		// التحقق من أن الإيميل مفعل
+		if (!user.isVerified) {
+			return res.status(400).json({ success: false, message: "Please verify your email first" });
+		}
+
+		// تحديث دور المستخدم إذا كان من الإيميلات المميزة ولم يكن أدمن بالفعل
+		if (ADMIN_EMAILS.includes(email.toLowerCase()) && user.role !== 'admin') {
+			user.role = 'admin';
+			await user.save();
 		}
 
 		generateTokenAndSetCookie(res, user._id);
@@ -191,9 +219,26 @@ export const checkAuth = async (req, res) => {
 			return res.status(400).json({ success: false, message: "User not found" });
 		}
 
-		res.status(200).json({ success: true, user });
+		// تحديث دور المستخدم إذا كان من الإيميلات المميزة ولم يكن أدمن بالفعل
+		if (ADMIN_EMAILS.includes(user.email.toLowerCase()) && user.role !== 'admin') {
+			user.role = 'admin';
+			await user.save();
+		}
+
+		res.status(200).json({ 
+			success: true, 
+			user: {
+				...user._doc,
+				password: undefined
+			}
+		});
 	} catch (error) {
 		console.log("Error in checkAuth ", error);
 		res.status(400).json({ success: false, message: error.message });
 	}
+};
+
+// دالة مساعدة للتحقق من صلاحية الأدمن
+export const isAdminEmail = (email) => {
+	return ADMIN_EMAILS.includes(email.toLowerCase());
 };

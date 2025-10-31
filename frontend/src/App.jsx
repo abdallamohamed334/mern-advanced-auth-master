@@ -1,3 +1,4 @@
+// App.jsx
 import { Navigate, Route, Routes } from "react-router-dom";
 import FloatingShape from "./components/FloatingShape";
 import DecorationsPage from './pages/DecorationsPage';
@@ -11,9 +12,7 @@ import PhotographersPage from './pages/PhotographersPage';
 import LoadingSpinner from "./components/LoadingSpinner";
 import WeddingHallsPage from './pages/WeddingHallsPage';
 import ConferenceHallsPage from './pages/ConferenceHallsPage';
-// import BirthdayPlacesPage from './pages/BirthdayPlacesPage';
-// import CafesPage from './pages/CafesPage';
-// import PhotographersPage from './pages/PhotographersPage'; // تأكد من استيراد هذا الملف
+import AdminDashboard from './pages/AdminDashboard'; // إضافة صفحة الأدمن
 
 import { Toaster } from "react-hot-toast";
 import { useAuthStore } from "./store/authStore";
@@ -29,6 +28,25 @@ const ProtectedRoute = ({ children }) => {
 
   if (!user?.isVerified) {
     return <Navigate to='/verify-email' replace />;
+  }
+
+  return children;
+};
+
+// حماية مسارات الأدمن فقط
+const AdminRoute = ({ children }) => {
+  const { isAuthenticated, user, isAdmin } = useAuthStore();
+
+  if (!isAuthenticated) {
+    return <Navigate to='/login' replace />;
+  }
+
+  if (!user?.isVerified) {
+    return <Navigate to='/verify-email' replace />;
+  }
+
+  if (!isAdmin()) {
+    return <Navigate to='/' replace />;
   }
 
   return children;
@@ -66,15 +84,27 @@ function App() {
             </ProtectedRoute>
           }
         />
-		<Route path="/photographers/:photographerId" element={<PhotographersPage />} />
-		<Route
-			path='/photographers'
-			element={
-				<ProtectedRoute>
-					<PhotographersPage />
-				</ProtectedRoute>
-			}
-			/>
+
+        {/* صفحة الأدمن */}
+        <Route
+          path='/admin/dashboard'
+          element={
+            <AdminRoute>
+              <AdminDashboard />
+            </AdminRoute>
+          }
+        />
+
+        {/* صفحة المصورين */}
+        <Route path="/photographers/:photographerId" element={<PhotographersPage />} />
+        <Route
+          path='/photographers'
+          element={
+            <ProtectedRoute>
+              <PhotographersPage />
+            </ProtectedRoute>
+          }
+        />
         
         {/* صفحة بديلة للرئيسية */}
         <Route
@@ -85,7 +115,9 @@ function App() {
             </ProtectedRoute>
           }
         />
-		    <Route path="/decorations" element={<DecorationsPage />} />
+
+        {/* صفحة الديكور */}
+        <Route path="/decorations" element={<DecorationsPage />} />
 
         {/* صفحات أنواع القاعات */}
         <Route
@@ -105,24 +137,6 @@ function App() {
           }
         />
         
-        {/* صفحات أخرى (معلقة حالياً) */}
-        {/* <Route
-          path='/birthday-places'
-          element={
-            <ProtectedRoute>
-              <BirthdayPlacesPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path='/cafes'
-          element={
-            <ProtectedRoute>
-              <CafesPage />
-            </ProtectedRoute>
-          }
-        /> */}
-
         {/* صفحات المصادقة */}
         <Route
           path='/signup'
@@ -163,16 +177,6 @@ function App() {
             </PublicRoute>
           }
         />
-
-        {/* مسار المصورين - تم إصلاحه */}
-        {/* <Route
-          path='/photographers'
-          element={
-            <ProtectedRoute>
-              <PhotographersPage />
-            </ProtectedRoute>
-          }
-        /> */}
 
         {/* جميع المسارات الأخرى */}
         <Route path='*' element={<Navigate to='/' replace />} />

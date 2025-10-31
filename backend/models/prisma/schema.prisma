@@ -1,0 +1,36 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = "postgresql://myuser:password@localhost:5432/evento_database"
+}
+
+model WeddingVenue {
+  id           String   @id @default(uuid())
+  name         String
+  type         String
+  category     String
+  governorate  String
+  city         String
+  capacity     Int
+  price        Int
+  image        String
+  images       String[]
+  features     String[]
+  description  String
+  available    Boolean   @default(true)
+  rating       Float?    @default(0)
+  contact      String
+  email        String
+  address      String
+  amenities    String[]
+  rules        String[]
+  weddingSpecific Json?
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("wedding_venues")
+}

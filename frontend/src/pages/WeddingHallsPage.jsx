@@ -2,6 +2,8 @@ import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 import { useAuthStore } from "../store/authStore";
 import { useNavigate } from "react-router-dom";
+import VenueMap from "../components/VenueMap"; 
+
 
 const WeddingHallsPage = () => {
   const { user, logout } = useAuthStore();
@@ -46,7 +48,7 @@ const WeddingHallsPage = () => {
     },
     "الغربية": { 
       name: "الغربية", 
-      cities: ["كل المدن", "طنطا", "المحلة الكبرى", "زفتى", "سمنود", "بسيون", "قطور"] 
+      cities: ["كل المدن", "طنطا", "المحلة الكبرى", "زفتى", "سمنود", "بسيون", "قطور","السنطه"] 
     },
     "المنوفية": { 
       name: "المنوفية", 
@@ -130,7 +132,7 @@ const WeddingHallsPage = () => {
     }
   };
 
-  // جلب البيانات من الـ API
+  // جلب البيانات من الـ API - معدل علشان PostgreSQL
   useEffect(() => {
     const fetchWeddingVenues = async () => {
       try {
@@ -147,8 +149,14 @@ const WeddingHallsPage = () => {
         if (response.ok) {
           const data = await response.json();
           
+          // التعديل علشان PostgreSQL بيكون الـ id مش _id
           if (data.venues && data.venues.length > 0) {
-            setWeddingVenues(data.venues);
+            const venuesWithId = data.venues.map(venue => ({
+              ...venue,
+              _id: venue.id || venue._id // علشان نحافظ على التوافق مع الكود الحالي
+            }));
+            
+            setWeddingVenues(venuesWithId);
             setDataSource("api");
           } else {
             throw new Error('لا توجد بيانات في الـ API');
@@ -171,7 +179,7 @@ const WeddingHallsPage = () => {
   useEffect(() => {
     const filtered = weddingVenues.filter(venue => {
       const matchesCategory = activeFilter === "all" || venue.category === activeFilter;
-      const matchesPrice = venue.price <= priceRange;
+      const matchesPrice = parseInt(venue.price) <= priceRange;
       const matchesGovernorate = selectedGovernorate === "all" || venue.governorate === selectedGovernorate;
       const matchesCity = selectedCity === "all" || selectedCity === "كل المدن" || venue.city === selectedCity;
       
@@ -236,7 +244,7 @@ ${bookingType === "inspection" ? `موعد المعاينة: ${bookingData.inspe
         body: JSON.stringify({
           to: venue.ownerPhone, // رقم صاحب القاعة
           message: ownerMessage,
-          venueId: venue._id
+          venueId: venue.id || venue._id // استخدم id بدل _id
         })
       });
     } catch (error) {
@@ -304,6 +312,7 @@ ${bookingType === "inspection" ? `موعد المعاينة: ${bookingData.inspe
     setSmsStatus("");
   };
 
+  // دالة الحجز - معدلة علشان PostgreSQL
   const handleBookingSubmit = async (bookingData) => {
     setBookingLoading(true);
     setSmsStatus("");
@@ -324,14 +333,14 @@ ${bookingType === "inspection" ? `موعد المعاينة: ${bookingData.inspe
       // 2. إرسال إشعار للمالك
       await sendOwnerNotification(selectedVenue, bookingData, user?.name || 'عميل', bookingData.phone);
 
-      // 3. حفظ بيانات الحجز في قاعدة البيانات
+      // 3. حفظ بيانات الحجز في قاعدة البيانات - التعديل علشان PostgreSQL
       const bookingResponse = await fetch('http://localhost:5000/api/bookings', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          venueId: selectedVenue._id,
+          venueId: selectedVenue.id || selectedVenue._id, // استخدم id بدل _id
           venueName: selectedVenue.name,
           type: bookingType,
           userName: user?.name || bookingData.name,
@@ -1063,6 +1072,25 @@ ${bookingType === "inspection" ? `موعد المعاينة: ${bookingData.inspe
                   </div>
                 </div>
               </div>
+                <div className="bg-white rounded-2xl border border-gray-200 p-6">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                      <span className="mr-2">📍</span>
+                          موقع القاعة على الخريطة
+                    </h3>
+                    <VenueMap 
+                      venue={venue}
+                      governorate={venue.governorate}
+                      city={venue.city}
+                    />
+                    <div className="mt-3 p-3 bg-blue-50 rounded-lg">
+                      <p className="text-sm text-blue-700 flex items-start gap-2">
+                        <span className="text-blue-500 mt-0.5">💡</span>
+                        <span>
+                          <strong>نصيحة:</strong> استخدم الخريطة لتحديد موقع القاعة بدقة وتخطيط أفضل للوصول إلى حفل زفافك
+                        </span>
+                      </p>
+                    </div>
+                  </div>
 
               {/* Booking Button */}
               <div className="bg-white rounded-2xl border border-gray-200 p-6">
@@ -1367,7 +1395,7 @@ ${bookingType === "inspection" ? `موعد المعاينة: ${bookingData.inspe
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                     {filteredVenues.map((venue) => (
                       <motion.div
-                        key={venue._id || venue.id}
+                        key={venue.id || venue._id} // استخدم id بدل _id
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         whileHover={{ scale: 1.02 }}
@@ -1388,7 +1416,7 @@ ${bookingType === "inspection" ? `موعد المعاينة: ${bookingData.inspe
                             </div>
                           )}
                           <div className="absolute top-4 left-4 bg-purple-500 text-white px-3 py-1 rounded-full text-sm font-bold">
-                            {venue.price.toLocaleString()} جنيه
+                            {parseInt(venue.price)?.toLocaleString()} جنيه
                           </div>
                           <div className="absolute top-4 right-4 bg-green-500 text-white px-2 py-1 rounded text-xs">
                             {venue.city}
